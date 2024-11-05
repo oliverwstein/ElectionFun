@@ -17,25 +17,41 @@
             background: rgba(255,255,255,0.9);
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
             border-radius: 5px;
-            max-width: 400px;
         }
         .dashboard {
             display: none;
-            position: fixed;
+            position: absolute;
             top: 20px;
-            right: 20px;
+            left: 50%;
+            transform: translateX(-50%);
             background: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 0 20px rgba(0,0,0,0.3);
-            max-width: 400px;
-            z-index: 1000;
+            min-width: 300px;
+            z-index: 9999;
+            font-family: Arial, sans-serif;
         }
-        .dashboard h2 { margin-top: 0; }
+        .dashboard h2 { 
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #0571b0;
+            padding-bottom: 5px;
+        }
         .stat-row {
-            margin: 10px 0;
-            padding: 5px 0;
+            margin: 12px 0;
+            padding: 8px 0;
             border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .stat-label {
+            font-weight: bold;
+            color: #666;
+        }
+        .stat-value {
+            color: #333;
         }
         .close-btn {
             position: absolute;
@@ -43,13 +59,21 @@
             right: 10px;
             cursor: pointer;
             font-weight: bold;
+            font-size: 20px;
+            color: #666;
+            background: none;
+            border: none;
+            padding: 5px 10px;
+        }
+        .close-btn:hover {
+            color: #333;
         }
     </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="dashboard" class="dashboard">
-    <span class="close-btn" onclick="closeDashboard()">×</span>
+    <button class="close-btn" onclick="closeDashboard()">×</button>
     <h2 id="state-name"></h2>
     <div id="state-stats"></div>
 </div>
@@ -63,7 +87,6 @@
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // Info control for hover
     const info = L.control();
     info.onAdd = function() {
         this._div = L.DomUtil.create('div', 'info');
@@ -73,19 +96,17 @@
 
     info.update = function(props) {
         this._div.innerHTML = '<h4>US Demographics</h4>' + 
-            (props ? '<b>' + props.name + '</b><br />' : 'Hover over a state');
+            (props ? '<b>' + props.name + '</b><br />Click for details' : 'Hover over a state');
     };
 
     info.addTo(map);
 
-    // Load and parse the CSV data
     fetch('ACSSPP1Y2023.S0201-Data.csv')
         .then(response => response.text())
         .then(csvText => {
             Papa.parse(csvText, {
                 header: true,
                 complete: function(results) {
-                    // Process the data into a more usable format
                     results.data.forEach(row => {
                         if (row["Geographic Area Name"] && row["POPGROUP"] === "001") {
                             const state = row["Geographic Area Name"];
@@ -144,20 +165,27 @@
         info.update();
     }
 
+    function formatStatRow(label, value) {
+        return `<div class="stat-row">
+            <span class="stat-label">${label}:</span>
+            <span class="stat-value">${value}</span>
+        </div>`;
+    }
+
     function showDashboard(state) {
         const data = censusData[state];
         if (!data) return;
 
         document.getElementById('state-name').textContent = state;
-        document.getElementById('state-stats').innerHTML = `
-            <div class="stat-row">Population: ${data.population.toLocaleString()}</div>
-            <div class="stat-row">Median Age: ${data.medianAge}</div>
-            <div class="stat-row">Bachelor's Degree or Higher: ${data.pctBachelor}%</div>
-            <div class="stat-row">Poverty Rate: ${data.pctPoverty}%</div>
-            <div class="stat-row">Under 18: ${data.pctUnder18}%</div>
-            <div class="stat-row">Employment Rate: ${data.pctEmployed}%</div>
-            <div class="stat-row">Median Household Income: $${data.medianIncome.toLocaleString()}</div>
-        `;
+        document.getElementById('state-stats').innerHTML = 
+            formatStatRow('Population', data.population.toLocaleString()) +
+            formatStatRow('Median Age', data.medianAge) +
+            formatStatRow('Bachelor\'s Degree or Higher', data.pctBachelor + '%') +
+            formatStatRow('Poverty Rate', data.pctPoverty + '%') +
+            formatStatRow('Under 18', data.pctUnder18 + '%') +
+            formatStatRow('Employment Rate', data.pctEmployed + '%') +
+            formatStatRow('Median Household Income', '$' + data.medianIncome.toLocaleString());
+
         document.getElementById('dashboard').style.display = 'block';
     }
 
