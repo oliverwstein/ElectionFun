@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>US Electoral College Map</title>
+    <title>US Demographics Map</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
         body { margin: 0; padding: 0; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
@@ -13,53 +14,93 @@
             padding: 6px 8px;
             font: 14px/16px Arial, Helvetica, sans-serif;
             background: white;
-            background: rgba(255,255,255,0.8);
+            background: rgba(255,255,255,0.9);
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
             border-radius: 5px;
+            max-width: 400px;
+        }
+        .dashboard {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            max-width: 400px;
+            z-index: 1000;
+        }
+        .dashboard h2 { margin-top: 0; }
+        .stat-row {
+            margin: 10px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="dashboard" class="dashboard">
+    <span class="close-btn" onclick="closeDashboard()">×</span>
+    <h2 id="state-name"></h2>
+    <div id="state-stats"></div>
+</div>
 <script>
     const map = L.map('map').setView([37.8, -96], 4);
+    let censusData = {};
+    let geojson;
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // Electoral votes by state
-    const stateEVs = {
-        'Alabama': 9, 'Alaska': 3, 'Arizona': 11, 'Arkansas': 6, 'California': 54,
-        'Colorado': 10, 'Connecticut': 7, 'Delaware': 3, 'Florida': 30, 'Georgia': 16,
-        'Hawaii': 4, 'Idaho': 4, 'Illinois': 19, 'Indiana': 11, 'Iowa': 6,
-        'Kansas': 6, 'Kentucky': 8, 'Louisiana': 8, 'Maine': 4, 'Maryland': 10,
-        'Massachusetts': 11, 'Michigan': 15, 'Minnesota': 10, 'Mississippi': 6, 'Missouri': 10,
-        'Montana': 4, 'Nebraska': 5, 'Nevada': 6, 'New Hampshire': 4, 'New Jersey': 14,
-        'New Mexico': 5, 'New York': 28, 'North Carolina': 16, 'North Dakota': 3, 'Ohio': 17,
-        'Oklahoma': 7, 'Oregon': 8, 'Pennsylvania': 19, 'Rhode Island': 4, 'South Carolina': 9,
-        'South Dakota': 3, 'Tennessee': 11, 'Texas': 40, 'Utah': 6, 'Vermont': 3,
-        'Virginia': 13, 'Washington': 12, 'West Virginia': 4, 'Wisconsin': 10, 'Wyoming': 3
-    };
+    // Load and parse the CSV data
+    fetch('ACSSPP1Y2023.S0201-Data.csv')
+        .then(response => response.text())
+        .then(csvText => {
+            Papa.parse(csvText, {
+                header: true,
+                complete: function(results) {
+                    // Process the data into a more usable format
+                    results.data.forEach(row => {
+                        if (row["Geographic Area Name"] && row["POPGROUP"] === "001") {
+                            const state = row["Geographic Area Name"];
+                            censusData[state] = {
+                                population: parseInt(row["S0201_001E"]),
+                                medianAge: parseFloat(row["S0201_018E"]),
+                                pctBachelor: parseFloat(row["S0201_157E"]),
+                                pctPoverty: parseFloat(row["S0201_270E"]),
+                                pctUnder18: parseFloat(row["S0201_009E"]) + parseFloat(row["S0201_010E"]),
+                                pctEmployed: parseFloat(row["S0201_177E"]),
+                                medianIncome: parseInt(row["S0201_249E"])
+                            };
+                        }
+                    });
+                    loadGeoJSON();
+                }
+            });
+        });
 
-    // Info control
-    const info = L.control();
-    info.onAdd = function() {
-        this._div = L.DomUtil.create('div', 'info');
-        this.update();
-        return this._div;
-    };
+    function loadGeoJSON() {
+        fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
+            .then(response => response.json())
+            .then(data => {
+                geojson = L.geoJson(data, {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+            });
+    }
 
-    info.update = function(props) {
-        this._div.innerHTML = '<h4>US Electoral Votes</h4>' + 
-            (props ? '<b>' + props.name + '</b><br />' + stateEVs[props.name] + ' electoral votes'
-            : 'Hover over a state');
-    };
-
-    info.addTo(map);
-
-    // Style for states
     function style(feature) {
         return {
             weight: 2,
@@ -71,7 +112,6 @@
         };
     }
 
-    // Highlight state on hover
     function highlightFeature(e) {
         const layer = e.target;
         layer.setStyle({
@@ -81,32 +121,42 @@
             fillOpacity: 0.7
         });
         layer.bringToFront();
-        info.update(layer.feature.properties);
     }
 
-    // Reset highlight
     function resetHighlight(e) {
         geojson.resetStyle(e.target);
-        info.update();
     }
 
-    // Add listeners to state layer
+    function showDashboard(state) {
+        const data = censusData[state];
+        if (!data) return;
+
+        document.getElementById('state-name').textContent = state;
+        document.getElementById('state-stats').innerHTML = `
+            <div class="stat-row">Population: ${data.population.toLocaleString()}</div>
+            <div class="stat-row">Median Age: ${data.medianAge}</div>
+            <div class="stat-row">Bachelor's Degree or Higher: ${data.pctBachelor}%</div>
+            <div class="stat-row">Poverty Rate: ${data.pctPoverty}%</div>
+            <div class="stat-row">Under 18: ${data.pctUnder18}%</div>
+            <div class="stat-row">Employment Rate: ${data.pctEmployed}%</div>
+            <div class="stat-row">Median Household Income: $${data.medianIncome.toLocaleString()}</div>
+        `;
+        document.getElementById('dashboard').style.display = 'block';
+    }
+
+    function closeDashboard() {
+        document.getElementById('dashboard').style.display = 'none';
+    }
+
     function onEachFeature(feature, layer) {
         layer.on({
             mouseover: highlightFeature,
-            mouseout: resetHighlight
+            mouseout: resetHighlight,
+            click: function(e) {
+                showDashboard(feature.properties.name);
+            }
         });
     }
-
-    // Fetch and add GeoJSON data
-    fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
-        .then(response => response.json())
-        .then(data => {
-            geojson = L.geoJson(data, {
-                style: style,
-                onEachFeature: onEachFeature
-            }).addTo(map);
-        });
 </script>
 </body>
 </html>
