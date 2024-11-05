@@ -63,6 +63,21 @@
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
+    // Info control for hover
+    const info = L.control();
+    info.onAdd = function() {
+        this._div = L.DomUtil.create('div', 'info');
+        this.update();
+        return this._div;
+    };
+
+    info.update = function(props) {
+        this._div.innerHTML = '<h4>US Demographics</h4>' + 
+            (props ? '<b>' + props.name + '</b><br />' : 'Hover over a state');
+    };
+
+    info.addTo(map);
+
     // Load and parse the CSV data
     fetch('ACSSPP1Y2023.S0201-Data.csv')
         .then(response => response.text())
@@ -121,10 +136,12 @@
             fillOpacity: 0.7
         });
         layer.bringToFront();
+        info.update(layer.feature.properties);
     }
 
     function resetHighlight(e) {
         geojson.resetStyle(e.target);
+        info.update();
     }
 
     function showDashboard(state) {
