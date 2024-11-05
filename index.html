@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>US Electoral College Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255,255,255,0.8);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+    const map = L.map('map').setView([37.8, -96], 4);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Electoral votes by state
+    const stateEVs = {
+        'Alabama': 9, 'Alaska': 3, 'Arizona': 11, 'Arkansas': 6, 'California': 54,
+        'Colorado': 10, 'Connecticut': 7, 'Delaware': 3, 'Florida': 30, 'Georgia': 16,
+        'Hawaii': 4, 'Idaho': 4, 'Illinois': 19, 'Indiana': 11, 'Iowa': 6,
+        'Kansas': 6, 'Kentucky': 8, 'Louisiana': 8, 'Maine': 4, 'Maryland': 10,
+        'Massachusetts': 11, 'Michigan': 15, 'Minnesota': 10, 'Mississippi': 6, 'Missouri': 10,
+        'Montana': 4, 'Nebraska': 5, 'Nevada': 6, 'New Hampshire': 4, 'New Jersey': 14,
+        'New Mexico': 5, 'New York': 28, 'North Carolina': 16, 'North Dakota': 3, 'Ohio': 17,
+        'Oklahoma': 7, 'Oregon': 8, 'Pennsylvania': 19, 'Rhode Island': 4, 'South Carolina': 9,
+        'South Dakota': 3, 'Tennessee': 11, 'Texas': 40, 'Utah': 6, 'Vermont': 3,
+        'Virginia': 13, 'Washington': 12, 'West Virginia': 4, 'Wisconsin': 10, 'Wyoming': 3
+    };
+
+    // Info control
+    const info = L.control();
+    info.onAdd = function() {
+        this._div = L.DomUtil.create('div', 'info');
+        this.update();
+        return this._div;
+    };
+
+    info.update = function(props) {
+        this._div.innerHTML = '<h4>US Electoral Votes</h4>' + 
+            (props ? '<b>' + props.name + '</b><br />' + stateEVs[props.name] + ' electoral votes'
+            : 'Hover over a state');
+    };
+
+    info.addTo(map);
+
+    // Style for states
+    function style(feature) {
+        return {
+            weight: 2,
+            opacity: 1,
+            color: 'white',
+            dashArray: '3',
+            fillOpacity: 0.7,
+            fillColor: '#0571b0'
+        };
+    }
+
+    // Highlight state on hover
+    function highlightFeature(e) {
+        const layer = e.target;
+        layer.setStyle({
+            weight: 5,
+            color: '#666',
+            dashArray: '',
+            fillOpacity: 0.7
+        });
+        layer.bringToFront();
+        info.update(layer.feature.properties);
+    }
+
+    // Reset highlight
+    function resetHighlight(e) {
+        geojson.resetStyle(e.target);
+        info.update();
+    }
+
+    // Add listeners to state layer
+    function onEachFeature(feature, layer) {
+        layer.on({
+            mouseover: highlightFeature,
+            mouseout: resetHighlight
+        });
+    }
+
+    // Fetch and add GeoJSON data
+    fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
+        .then(response => response.json())
+        .then(data => {
+            geojson = L.geoJson(data, {
+                style: style,
+                onEachFeature: onEachFeature
+            }).addTo(map);
+        });
+</script>
+</body>
+</html>
